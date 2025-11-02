@@ -28,6 +28,14 @@
 
 * `config.json`（*LSNet 模型配置文件*，如果有的话请下载）
 
+### v2版本
+
+huggingface仓库地址：https://huggingface.co/heathcliff01/Kaloscope2.0
+
+或者在modelscope下载：https://www.modelscope.cn/models/Heathcliff02/Kaloscope-2.0/summary
+
+### v1版本
+
 huggingface仓库地址：https://huggingface.co/heathcliff01/Kaloscope/tree/main
 
 或者在modelscope下载：https://www.modelscope.cn/models/Heathcliff02/Kaloscope/files
