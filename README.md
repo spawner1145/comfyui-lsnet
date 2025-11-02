@@ -26,6 +26,8 @@
 
 * `class_mapping.csv`（*风格类别映射配置文件*，适配不同画风标签的识别与归类）
 
+* `config.json`（*LSNet 模型配置文件*，如果有的话请下载）
+
 huggingface仓库地址：https://huggingface.co/heathcliff01/Kaloscope/tree/main
 
 或者在modelscope下载：https://www.modelscope.cn/models/Heathcliff02/Kaloscope/files
@@ -53,6 +55,8 @@ ComfyUI/
                ├── best_checkpoint.pth
 
                └── class_mapping.csv
+
+               └── config.json # 如果有
 ```
 
 相关操作截图：
