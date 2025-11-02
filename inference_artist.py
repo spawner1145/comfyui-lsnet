@@ -27,7 +27,7 @@ def get_args_parser():
     
     # 模型参数
     parser.add_argument('--model', default='lsnet_t_artist', type=str,
-                        choices=['lsnet_t_artist', 'lsnet_s_artist', 'lsnet_b_artist', 'lsnet_l_artist', 'lsnet_xl_artist'],
+                        choices=['lsnet_t_artist', 'lsnet_s_artist', 'lsnet_b_artist', 'lsnet_l_artist', 'lsnet_xl_artist', 'lsnet_xl_artist_448'],
                         help='Model architecture')
     parser.add_argument('--checkpoint', required=True, type=str,
                         help='Path to model checkpoint')
@@ -35,6 +35,8 @@ def get_args_parser():
                         help='Number of classes. If omitted, will try to infer from checkpoint or CSV mapping.')
     parser.add_argument('--feature-dim', default=None, type=int,
                         help='Feature dimension')
+    parser.add_argument('--input-size', default=224, type=int,
+                        help='Input image size')
     
     # 推理模式
     parser.add_argument('--mode', default='classify', type=str,
@@ -287,9 +289,13 @@ def process_single_image(args, model, transform, class_mapping: Optional[Dict[in
         return
     
     print(f"\nProcessing: {image_path.name}")
+    
+    # 预处理
     image_tensor = preprocess_image(image_path, transform)
     
     results = {}
+    
+    # 分类模式
     if args.mode in ['classify', 'both']:
         print("\n[Classification Results]")
         classification = classify_image(model, image_tensor, args.device, class_mapping, args.top_k, args.threshold)
@@ -297,6 +303,8 @@ def process_single_image(args, model, transform, class_mapping: Optional[Dict[in
         
         for i, result in enumerate(classification, 1):
             print(f"{i}. {result['class_name']}: {result['probability']:.4f}")
+    
+    # 聚类模式（提取特征）
     if args.mode in ['cluster', 'both']:
         print("\n[Feature Extraction]")
         features = extract_features(model, image_tensor, args.device)
@@ -313,6 +321,8 @@ def process_directory(args, model, transform, class_mapping: Optional[Dict[int, 
     if not input_dir.is_dir():
         print(f"Error: Directory not found: {input_dir}")
         return
+    
+    # 支持的图像格式
     image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
     image_paths = [p for p in input_dir.glob('**/*') if p.suffix.lower() in image_extensions]
     
@@ -323,8 +333,12 @@ def process_directory(args, model, transform, class_mapping: Optional[Dict[int, 
     print(f"Found {len(image_paths)} images")
     
     all_results = {}
+    
+    # 批量处理
     for i in range(0, len(image_paths), args.batch_size):
         batch_paths = image_paths[i:i + args.batch_size]
+        
+        # 预处理批次
         batch_tensors = []
         for path in batch_paths:
             try:
@@ -338,6 +352,8 @@ def process_directory(args, model, transform, class_mapping: Optional[Dict[int, 
             continue
         
         batch_tensor = torch.cat(batch_tensors, dim=0)
+        
+        # 推理
         with torch.no_grad():
             batch_tensor = batch_tensor.to(args.device)
             
@@ -349,6 +365,7 @@ def process_directory(args, model, transform, class_mapping: Optional[Dict[int, 
             if args.mode in ['cluster', 'both']:
                 features = model(batch_tensor, return_features=True)
         
+        # 保存结果
         for j, path in enumerate(batch_paths):
             if j >= len(batch_tensors):
                 continue
@@ -356,6 +373,7 @@ def process_directory(args, model, transform, class_mapping: Optional[Dict[int, 
             result = {'image': path.name}
             
             if args.mode in ['classify', 'both']:
+                # 获取该图像的 top-k 结果
                 img_top_probs = top_probs[j].cpu().numpy()
                 img_top_indices = top_indices[j].cpu().numpy()
                 
@@ -370,6 +388,7 @@ def process_directory(args, model, transform, class_mapping: Optional[Dict[int, 
                             'probability': float(prob)
                         })
                 
+                # 如果需要，取前 top_k
                 if len(classifications) > args.top_k:
                     classifications = classifications[:args.top_k]
                 
@@ -386,6 +405,15 @@ def process_directory(args, model, transform, class_mapping: Optional[Dict[int, 
 
 
 def main(args):
+    # 根据模型配置动态设置输入大小
+    from lsnet_model.lsnet_artist import default_cfgs_artist
+    if args.model in default_cfgs_artist:
+        model_cfg = default_cfgs_artist[args.model]
+        configured_input_size = model_cfg.get('input_size', (3, 224, 224))[1]  # 获取高度（假设正方形）
+        if args.input_size != configured_input_size:
+            args.input_size = configured_input_size
+            print(f"Auto-setting input_size to {configured_input_size} for model {args.model} (from config)")
+    
     # 创建输出目录
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -393,30 +421,46 @@ def main(args):
     if args.mode in ['classify', 'both'] and not args.class_csv:
         raise ValueError('分类或混合模式下必须提供 --class-csv，且需使用训练阶段导出的映射文件。')
 
+    # 加载类别映射
     class_mapping = load_class_mapping(args.class_csv)
+
+    # 加载 checkpoint 并解析类别数
     state_dict = load_checkpoint_state(args.checkpoint)
     state_dict = normalize_state_dict_keys(state_dict)
     args.num_classes = resolve_num_classes(args.num_classes, class_mapping, state_dict)
     args.feature_dim = resolve_feature_dim(args.feature_dim, state_dict)
+
+    # 加载模型
     model = load_model(args, state_dict)
-    config = resolve_data_config({}, model=model)
+    
+    # 创建数据转换
+    config = resolve_data_config({'input_size': (3, args.input_size, args.input_size)}, model=model)
     transform = create_transform(**config)
+    
+    # 判断输入类型
     input_path = Path(args.input)
     
     if input_path.is_file():
+        # 单张图像
         results = process_single_image(args, model, transform, class_mapping)
         
+        # 保存结果
         output_file = output_dir / f"{input_path.stem}_result.json"
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"\nResults saved to: {output_file}")
         
     elif input_path.is_dir():
+        # 目录批量处理
         results = process_directory(args, model, transform, class_mapping)
+        
+        # 保存结果
         output_file = output_dir / "batch_results.json"
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"\nResults saved to: {output_file}")
+        
+        # 如果是聚类模式，额外保存特征矩阵
         if args.mode in ['cluster', 'both']:
             features_list = []
             image_names = []

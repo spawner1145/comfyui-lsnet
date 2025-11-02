@@ -66,8 +66,22 @@ class LSNetModelLoader:
         state_dict = normalize_state_dict_keys(state_dict)
         num_classes = resolve_num_classes(None, class_mapping, state_dict)
         feature_dim = resolve_feature_dim(None, state_dict)
+        
+        # 自动从config.json读取model类型
+        config_path = os.path.join(model_dir, "config.json")
+        model_type = 'lsnet_xl_artist'  # 默认值
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    if 'model' in config and config['model'] in ['lsnet_t_artist', 'lsnet_s_artist', 'lsnet_b_artist', 'lsnet_l_artist', 'lsnet_xl_artist', 'lsnet_xl_artist_448']:
+                        model_type = config['model']
+                        print(f"Model type loaded from config: {model_type}")
+            except Exception as e:
+                print(f"Warning: Failed to load config.json: {e}")
+        
         model = create_model(
-            'lsnet_xl_artist',
+            model_type,
             pretrained=False,
             num_classes=num_classes,
             feature_dim=feature_dim,
@@ -75,7 +89,17 @@ class LSNetModelLoader:
         model.load_state_dict(state_dict, strict=False)
         model.to(device)
         model.eval()
-        config = resolve_data_config({}, model=model)
+        
+        # 根据模型配置动态设置输入大小
+        from lsnet_model.lsnet_artist import default_cfgs_artist
+        input_size = 224  # 默认值
+        if model_type in default_cfgs_artist:
+            model_cfg = default_cfgs_artist[model_type]
+            configured_input_size = model_cfg.get('input_size', (3, 224, 224))[1]  # 获取高度（假设正方形）
+            input_size = configured_input_size
+            print(f"Auto-setting input_size to {input_size} for model {model_type}")
+        
+        config = resolve_data_config({'input_size': (3, input_size, input_size)}, model=model)
         transform = create_transform(**config)
         model_bundle = {
             'model': model,

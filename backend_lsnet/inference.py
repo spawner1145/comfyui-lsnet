@@ -72,8 +72,17 @@ def process_image(image_path, model='lsnet_t_artist', checkpoint='', num_classes
         # Load model
         model_obj = load_model(args, state_dict)
 
+        # 根据模型配置动态设置输入大小
+        from lsnet_model.lsnet_artist import default_cfgs_artist
+        if args.model in default_cfgs_artist:
+            model_cfg = default_cfgs_artist[args.model]
+            configured_input_size = model_cfg.get('input_size', (3, 224, 224))[1]  # 获取高度（假设正方形）
+            if args.input_size != configured_input_size:
+                args.input_size = configured_input_size
+                print(f"Auto-setting input_size to {configured_input_size} for model {args.model}")
+
         # Prepare transform
-        config = resolve_data_config({}, model=model_obj)
+        config = resolve_data_config({'input_size': (3, args.input_size, args.input_size)}, model=model_obj)
         transform = create_transform(**config)
 
         # Process single image

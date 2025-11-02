@@ -71,7 +71,7 @@ class LSNetArtist(LSNet):
         x = self.projection(x)
         return x
     
-    def forward(self, x, return_features=False):
+    def forward(self, x, return_features=False, return_both=False):
         """
         x: 输入图像
         return_features: 是否只返回特征向量（用于聚类）
@@ -88,13 +88,16 @@ class LSNetArtist(LSNet):
         
         # 返回分类结果
         if self.distillation:
-            x = self.head(features), self.head_dist(features)
+            logits = self.head(features), self.head_dist(features)
             if not self.training:
-                x = (x[0] + x[1]) / 2
+                logits = (logits[0] + logits[1]) / 2
         else:
-            x = self.head(features)
+            logits = self.head(features)
         
-        return x
+        if return_both:
+            return features, logits
+        
+        return logits
     
     def get_features(self, x):
         """
@@ -125,12 +128,29 @@ def _cfg_artist(url='', **kwargs):
     }
 
 
+def _cfg_artist_448(url='', **kwargs):
+    return {
+        'url': url,
+        'num_classes': 50000, 
+        'input_size': (3, 448, 448), 
+        'pool_size': (4, 4),
+        'crop_pct': .9, 
+        'interpolation': 'bicubic',
+        'mean': (0.485, 0.456, 0.406), 
+        'std': (0.229, 0.224, 0.225),
+        'first_conv': 'patch_embed.0.c', 
+        'classifier': ('head.linear', 'head_dist.linear'),
+        **kwargs
+    }
+
+
 default_cfgs_artist = dict(
     lsnet_t_artist = _cfg_artist(),
     lsnet_s_artist = _cfg_artist(),
     lsnet_b_artist = _cfg_artist(),
     lsnet_l_artist = _cfg_artist(),
     lsnet_xl_artist = _cfg_artist(),
+    lsnet_xl_artist_448 = _cfg_artist_448(),
 )
 
 
@@ -237,6 +257,26 @@ def lsnet_xl_artist(num_classes=1000, distillation=False, pretrained=False,
         num_classes=num_classes, 
         distillation=distillation,
         img_size=224,
+        patch_size=8,
+        embed_dim=[192, 384, 576, 768],
+        depth=[8, 12, 16, 20],
+        num_heads=[6, 6, 6, 6],
+        feature_dim=feature_dim,
+        use_projection=use_projection,
+        **kwargs
+    )
+    return model
+
+
+@register_model
+def lsnet_xl_artist_448(num_classes=50000, distillation=False, pretrained=False,
+                        feature_dim=None, use_projection=True, **kwargs):
+    model = _create_lsnet_artist(
+        "lsnet_xl_artist_448",
+        pretrained=pretrained,
+        num_classes=num_classes, 
+        distillation=distillation,
+        img_size=448,
         patch_size=8,
         embed_dim=[192, 384, 576, 768],
         depth=[8, 12, 16, 20],

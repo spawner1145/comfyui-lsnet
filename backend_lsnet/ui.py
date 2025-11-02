@@ -83,8 +83,23 @@ def create_ui():
                 class_csv = None
                 if csv_files:
                     class_csv = os.path.join("models/lsnet", model, csv_files[0])  # use first available
+                
+                # 自动从config.json读取model类型
+                model_dir = os.path.join("models/lsnet", model)
+                config_path = os.path.join(model_dir, "config.json")
+                model_type = 'lsnet_xl_artist'  # 默认值
+                if os.path.exists(config_path):
+                    try:
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config = json.load(f)
+                            if 'model' in config and config['model'] in ['lsnet_t_artist', 'lsnet_s_artist', 'lsnet_b_artist', 'lsnet_l_artist', 'lsnet_xl_artist', 'lsnet_xl_artist_448']:
+                                model_type = config['model']
+                                print(f"Model type loaded from config: {model_type}")
+                    except Exception as e:
+                        print(f"Warning: Failed to load config.json: {e}")
+                
                 kwargs = {
-                    'model': 'lsnet_xl_artist',  # 固定模型架构
+                    'model': model_type,
                     'checkpoint': checkpoint,
                     'mode': 'classify',  # default to classify
                     'device': device,
