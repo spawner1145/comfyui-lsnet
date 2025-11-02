@@ -1,7 +1,7 @@
 [project]
 name = "lsnet"
 description = ""
-version = "1.0.4"
+version = "1.0.7"
 license = {file = "LICENSE"} 
 # classifiers = [
 #     # For OS-independent nodes (works on all operating systems)
