@@ -79,7 +79,7 @@ ComfyUI/
 
 ### 2. 安装依赖
 
-将上述两个文件放入子文件夹后，执行以下命令安装 LSNet 运行所需依赖(webui插件可以跳过这一步，会自动安装依赖)：
+将上述两个(或三个)文件放入子文件夹后，执行以下命令安装 LSNet 运行所需依赖(webui插件可以跳过这一步，会自动安装依赖)：
 
 ```
 pip install -r requirements.txt --upgrade
